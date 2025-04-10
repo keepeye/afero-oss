@@ -78,7 +78,7 @@ func TestNewOssFile(t *testing.T) {
 	})
 }
 
-func TestRead(t *testing.T) {
+func TesFiletRead(t *testing.T) {
 	t.Run("Read with unreadable flag return error", func(t *testing.T) {
 		fs := getMockedFs()
 		f := getMockedFile("testfile", os.O_WRONLY, fs)
@@ -146,7 +146,7 @@ func TestRead(t *testing.T) {
 	})
 }
 
-func TestReadAt(t *testing.T) {
+func TestFileReadAt(t *testing.T) {
 	t.Run("ReadAt with unreadable flag return error", func(t *testing.T) {
 		fs := getMockedFs()
 		f := getMockedFile("testfile", os.O_WRONLY, fs)
@@ -191,7 +191,7 @@ func TestReadAt(t *testing.T) {
 	})
 }
 
-func TestSeek(t *testing.T) {
+func TestFileSeek(t *testing.T) {
 	t.Run("Seek on unreadable/unwritable file returns error", func(t *testing.T) {
 		fs := getMockedFs()
 		f := getMockedFile("testfile", os.O_WRONLY, fs)
@@ -276,7 +276,7 @@ func TestSeek(t *testing.T) {
 	})
 }
 
-func TestWrite(t *testing.T) {
+func TestFileWrite(t *testing.T) {
 	t.Run("Write unwritable file returns error", func(t *testing.T) {
 		fs := getMockedFs()
 		f := getMockedFile("testfile", os.O_RDONLY, fs)

@@ -461,3 +461,61 @@ func TestFsName(t *testing.T) {
 	name := fs.Name()
 	assert.Equal(t, "OssFs", name)
 }
+
+func TestFsChmod(t *testing.T) {
+	m := &mocks.ObjectManager{}
+	bucket := "test-bucket"
+	ctx := context.TODO()
+
+	fs := &Fs{
+		manager:    m,
+		bucketName: bucket,
+		ctx:        ctx,
+		separator:  "/",
+	}
+
+	t.Run("chmod returns not implemented error", func(t *testing.T) {
+		err := fs.Chmod("test.txt", 0o644)
+		assert.NotNil(t, err)
+		assert.EqualError(t, err, "OSS: method Chmod is not implemented")
+	})
+}
+
+func TestFsChown(t *testing.T) {
+	m := &mocks.ObjectManager{}
+	bucket := "test-bucket"
+	ctx := context.TODO()
+
+	fs := &Fs{
+		manager:    m,
+		bucketName: bucket,
+		ctx:        ctx,
+		separator:  "/",
+	}
+
+	t.Run("chown returns not implemented error", func(t *testing.T) {
+		err := fs.Chown("test.txt", 1000, 1000)
+		assert.NotNil(t, err)
+		assert.EqualError(t, err, "OSS: method Chown is not implemented")
+	})
+}
+
+func TestFsChtimes(t *testing.T) {
+	m := &mocks.ObjectManager{}
+	bucket := "test-bucket"
+	ctx := context.TODO()
+
+	fs := &Fs{
+		manager:    m,
+		bucketName: bucket,
+		ctx:        ctx,
+		separator:  "/",
+	}
+
+	t.Run("chtimes returns not implemented error", func(t *testing.T) {
+		now := time.Now()
+		err := fs.Chtimes("test.txt", now, now)
+		assert.NotNil(t, err)
+		assert.EqualError(t, err, "OSS: method Chtimes is not implemented")
+	})
+}
