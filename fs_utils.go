@@ -30,7 +30,7 @@ func (fs *Fs) normFileName(s string) string {
 		sep = "/"
 	}
 	s = strings.TrimLeft(s, "/\\")
-	s = strings.Replace(s, "\\", sep, -1)
-	s = strings.Replace(s, "/", sep, -1)
+	s = strings.ReplaceAll(s, "\\", sep)
+	s = strings.ReplaceAll(s, "/", sep)
 	return s
 }
