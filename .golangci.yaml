@@ -27,7 +27,7 @@ formatters:
         - standard
         - default
         - prefix(github.com/messikiller/afero-oss)
-    gofumt:
+    gofumpt:
       module-path: github.com/messikiller/afero-oss
     goimports:
       local-prefixes:
