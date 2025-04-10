@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/messikiller/afero-oss/internal/mocks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/messikiller/afero-oss/internal/mocks"
 )
 
 func TestNewOssFs(t *testing.T) {
@@ -195,7 +196,7 @@ func TestFsOpenFile(t *testing.T) {
 
 	t.Run("open existing file success", func(t *testing.T) {
 		m.On("IsObjectExist", ctx, bucket, "test.txt").Return(true, nil).Once()
-		file, err := fs.OpenFile("test.txt", os.O_RDONLY, 0644)
+		file, err := fs.OpenFile("test.txt", os.O_RDONLY, 0o644)
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
 		assert.Implements(t, (*afero.File)(nil), file)
@@ -205,7 +206,7 @@ func TestFsOpenFile(t *testing.T) {
 	t.Run("open non-existing file with create flag success", func(t *testing.T) {
 		m.On("IsObjectExist", ctx, bucket, "new.txt").Return(false, nil).Once()
 		m.On("PutObject", ctx, bucket, "new.txt", strings.NewReader("")).Return(true, nil).Once()
-		file, err := fs.OpenFile("new.txt", os.O_CREATE|os.O_RDWR, 0644)
+		file, err := fs.OpenFile("new.txt", os.O_CREATE|os.O_RDWR, 0o644)
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
 		assert.Implements(t, (*afero.File)(nil), file)
@@ -215,7 +216,7 @@ func TestFsOpenFile(t *testing.T) {
 	t.Run("open file with truncate flag success", func(t *testing.T) {
 		m.On("IsObjectExist", ctx, bucket, "trunc.txt").Return(true, nil).Once()
 		m.On("PutObject", ctx, bucket, "trunc.txt", strings.NewReader("")).Return(true, nil).Once()
-		file, err := fs.OpenFile("trunc.txt", os.O_TRUNC|os.O_RDWR, 0644)
+		file, err := fs.OpenFile("trunc.txt", os.O_TRUNC|os.O_RDWR, 0o644)
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
 		assert.Implements(t, (*afero.File)(nil), file)
@@ -225,7 +226,7 @@ func TestFsOpenFile(t *testing.T) {
 	t.Run("open existing file from cache", func(t *testing.T) {
 		cachedFile := &File{name: "cached.txt", openFlag: os.O_RDONLY}
 		fs.openedFiles["cached.txt"] = cachedFile
-		file, err := fs.OpenFile("cached.txt", os.O_RDONLY, 0644)
+		file, err := fs.OpenFile("cached.txt", os.O_RDONLY, 0o644)
 		assert.Nil(t, err)
 		assert.Equal(t, cachedFile, file)
 		assert.Implements(t, (*afero.File)(nil), file)
@@ -233,7 +234,7 @@ func TestFsOpenFile(t *testing.T) {
 
 	t.Run("open non-existing file without create flag fails", func(t *testing.T) {
 		m.On("IsObjectExist", ctx, bucket, "nonexist.txt").Return(false, nil).Once()
-		_, err := fs.OpenFile("nonexist.txt", os.O_RDONLY, 0644)
+		_, err := fs.OpenFile("nonexist.txt", os.O_RDONLY, 0o644)
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, afero.ErrFileNotFound)
 		m.AssertExpectations(t)
@@ -241,7 +242,7 @@ func TestFsOpenFile(t *testing.T) {
 
 	t.Run("open file with check exist error fails", func(t *testing.T) {
 		m.On("IsObjectExist", ctx, bucket, "error.txt").Return(false, afero.ErrFileNotFound).Once()
-		_, err := fs.OpenFile("error.txt", os.O_RDONLY, 0644)
+		_, err := fs.OpenFile("error.txt", os.O_RDONLY, 0o644)
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, afero.ErrFileNotFound)
 		m.AssertExpectations(t)

@@ -1,14 +1,33 @@
-linters-settings:
-    gci:
-        sections:
-            - standard
-            - default
-            - prefix(github.com/messikiller/afero-oss)
-
+version: "2"
 linters:
-    disable-all: true
-    enable:
-        - gci
-        - gofmt
-        - gofumpt
-        - staticcheck
+  default: none
+  enable:
+    - staticcheck
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/messikiller/afero-oss)
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

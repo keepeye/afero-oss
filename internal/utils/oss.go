@@ -13,8 +13,10 @@ import (
 	"github.com/spf13/afero"
 )
 
-var ossDirSeparator string = "/"
-var ossDefaultFileMode fs.FileMode = 0o755
+var (
+	ossDirSeparator    string      = "/"
+	ossDefaultFileMode fs.FileMode = 0o755
+)
 
 type OssObjectManager struct {
 	ObjectManager

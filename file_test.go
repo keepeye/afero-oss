@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/messikiller/afero-oss/internal/mocks"
-	"github.com/messikiller/afero-oss/internal/utils"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/messikiller/afero-oss/internal/mocks"
+	"github.com/messikiller/afero-oss/internal/utils"
 )
 
 func getMockedFs() *Fs {

@@ -9,8 +9,9 @@ import (
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
-	"github.com/messikiller/afero-oss/internal/utils"
 	"github.com/spf13/afero"
+
+	"github.com/messikiller/afero-oss/internal/utils"
 )
 
 const (
