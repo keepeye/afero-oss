@@ -19,12 +19,23 @@ formatters:
     - gci
     - gofmt
     - gofumpt
+    - goimports
+    - golines
   settings:
     gci:
       sections:
         - standard
         - default
         - prefix(github.com/messikiller/afero-oss)
+    gofumt:
+      module-path: github.com/messikiller/afero-oss
+    goimports:
+      local-prefixes:
+          - github.com/messikiller/afero-oss
+    golines:
+      max-len: 200
+      tab-len: 4
+      shorten-comments: true
   exclusions:
     generated: lax
     paths:
