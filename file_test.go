@@ -1,11 +1,14 @@
 package ossfs
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"strings"
 	"syscall"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -13,15 +16,19 @@ import (
 	"github.com/messikiller/afero-oss/internal/utils"
 )
 
-func getMockedFs() *Fs {
+func getMockedFs(t *testing.T) *Fs {
 	fs := NewOssFs("test-ak", "test-sk", "test-region", "test-bucket")
-	fs.manager = &mocks.ObjectManager{}
+	fs.manager = mocks.NewMockObjectManager(t)
 	return fs
 }
 
 func getMockedFile(name string, flag int, fs *Fs) *File {
 	f, _ := NewOssFile(name, flag, fs)
 	return f
+}
+
+func getMockedFileInfo(t *testing.T) *mocks.MockFileInfo {
+	return mocks.NewMockFileInfo(t)
 }
 
 func TestNewOssFile(t *testing.T) {
@@ -75,9 +82,9 @@ func TestNewOssFile(t *testing.T) {
 	})
 }
 
-func TesFiletRead(t *testing.T) {
+func TesFileRead(t *testing.T) {
 	t.Run("Read with unreadable flag return error", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		f := getMockedFile("testfile", os.O_WRONLY, fs)
 
 		p := make([]byte, 0)
@@ -88,7 +95,7 @@ func TesFiletRead(t *testing.T) {
 	})
 
 	t.Run("Read on directory return error", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		f := getMockedFile("testdir", os.O_RDONLY, fs)
 		f.isDir = true
 
@@ -100,7 +107,7 @@ func TesFiletRead(t *testing.T) {
 	})
 
 	t.Run("Read on closed file return error", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		f := getMockedFile("testfile", os.O_RDONLY, fs)
 		f.closed = true
 
@@ -112,10 +119,11 @@ func TesFiletRead(t *testing.T) {
 	})
 
 	t.Run("Successful read updates offset", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		var cu utils.CleanUp = func() {}
-		mockManager := fs.manager.(*mocks.ObjectManager)
-		mockManager.On("GetObjectPart", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
 			Return(strings.NewReader("testdata"), cu, nil)
 
 		f := getMockedFile("testfile", os.O_RDONLY, fs)
@@ -128,9 +136,10 @@ func TesFiletRead(t *testing.T) {
 	})
 
 	t.Run("ReadAt error propagates", func(t *testing.T) {
-		fs := getMockedFs()
-		mockManager := fs.manager.(*mocks.ObjectManager)
-		mockManager.On("GetObjectPart", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		fs := getMockedFs(t)
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
 			Return(nil, nil, syscall.EIO)
 
 		f := getMockedFile("testfile", os.O_RDONLY, fs)
@@ -144,7 +153,7 @@ func TesFiletRead(t *testing.T) {
 
 func TestFileReadAt(t *testing.T) {
 	t.Run("ReadAt with unreadable flag return error", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		f := getMockedFile("testfile", os.O_WRONLY, fs)
 
 		p := make([]byte, 0)
@@ -155,7 +164,7 @@ func TestFileReadAt(t *testing.T) {
 	})
 
 	t.Run("ReadAt on dir return error", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		f := getMockedFile("/path/to/dir/", os.O_WRONLY, fs)
 
 		p := make([]byte, 0)
@@ -166,23 +175,236 @@ func TestFileReadAt(t *testing.T) {
 	})
 
 	t.Run("ReadAt success", func(t *testing.T) {
-		fs := getMockedFs()
+		fs := getMockedFs(t)
 		f := getMockedFile("testfile", os.O_RDONLY, fs)
 
 		p := make([]byte, 4)
 
 		var cu utils.CleanUp = func() {}
 		off := int64(5)
-		m := &mocks.ObjectManager{}
-		m.
-			On("GetObjectPart", f.fs.ctx, f.fs.bucketName, f.name, off, off+int64(len(p))).
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObjectPart(f.fs.ctx, f.fs.bucketName, f.name, off, off+int64(len(p))).
 			Return(strings.NewReader("test result"), cu, nil)
-		fs.manager = m
 
 		n, e := f.ReadAt(p, off)
 
 		assert.Nil(t, e)
 		assert.Equal(t, 4, n)
 		assert.Equal(t, "test", string(p))
+	})
+}
+
+func TestFileSeek(t *testing.T) {
+	t.Run("Seek on unreadable/unwritable file returns error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY|os.O_APPEND, fs)
+		f.closed = true
+
+		_, err := f.Seek(0, io.SeekStart)
+		assert.Error(t, err)
+		assert.Equal(t, syscall.EPERM, err)
+	})
+
+	t.Run("Seek on directory returns error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testdir", os.O_RDONLY, fs)
+		f.isDir = true
+
+		_, err := f.Seek(0, io.SeekStart)
+		assert.Error(t, err)
+		assert.Equal(t, syscall.EPERM, err)
+	})
+
+	t.Run("Seek with invalid whence returns error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDWR, fs)
+		fi := getMockedFileInfo(t)
+		fi.On("Size").Return(int64(0))
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObjectMeta(mock.Anything, mock.Anything, mock.Anything).
+			Return(fi, nil)
+
+		_, err := f.Seek(0, 3)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid whence value")
+	})
+
+	t.Run("Seek beyond file size returns error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDWR, fs)
+		fi := getMockedFileInfo(t)
+		fi.On("Size").Return(int64(100))
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObjectMeta(mock.Anything, mock.Anything, mock.Anything).
+			Return(fi, nil)
+
+		_, err := f.Seek(101, io.SeekStart)
+		assert.Error(t, err)
+		assert.Equal(t, afero.ErrOutOfRange, err)
+	})
+
+	t.Run("Seek to negative offset returns error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDWR, fs)
+		fi := getMockedFileInfo(t)
+		fi.On("Size").Return(int64(100))
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObjectMeta(mock.Anything, mock.Anything, mock.Anything).
+			Return(fi, nil)
+
+		_, err := f.Seek(-1, io.SeekStart)
+		assert.Error(t, err)
+		assert.Equal(t, afero.ErrOutOfRange, err)
+	})
+
+	t.Run("Successful SeekStart updates offset", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDWR, fs)
+		fi := getMockedFileInfo(t)
+		fi.On("Size").Return(int64(100))
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObjectMeta(mock.Anything, mock.Anything, mock.Anything).
+			Return(fi, nil)
+
+		newOffset, err := f.Seek(50, io.SeekStart)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(50), newOffset)
+		assert.Equal(t, int64(50), f.offset)
+	})
+
+	// 	t.Run("Successful SeekCurrent updates offset", func(t *testing.T) {
+	// 		fs := getMockedFs(t)
+	// 		f := getMockedFile("testfile", os.O_RDWR, fs)
+	// 		f.offset = 20
+	// 		fi := getMockedFileInfo(t)
+	// 		fi.On("Size").Return(int64(100))
+	// 		fs.manager.(*mocks.ObjectManager).
+	// 			On("GetObjectMeta", mock.Anything, mock.Anything, mock.Anything).
+	// 			Return(fi, nil)
+
+	// 		newOffset, err := f.Seek(30, io.SeekCurrent)
+	// 		assert.NoError(t, err)
+	// 		assert.Equal(t, int64(50), newOffset)
+	// 		assert.Equal(t, int64(50), f.offset)
+	// 	})
+
+	// 	t.Run("Successful SeekEnd updates offset", func(t *testing.T) {
+	// 		fs := getMockedFs(t)
+	// 		f := getMockedFile("testfile", os.O_RDWR, fs)
+	// 		fi := getMockedFileInfo(t)
+	// 		fi.On("Size").Return(int64(100))
+	// 		fs.manager.(*mocks.ObjectManager).
+	// 			On("GetObjectMeta", mock.Anything, mock.Anything, mock.Anything).
+	// 			Return(fi, nil)
+
+	// 		newOffset, err := f.Seek(-10, io.SeekEnd)
+	// 		assert.NoError(t, err)
+	// 		assert.Equal(t, int64(90), newOffset)
+	// 		assert.Equal(t, int64(90), f.offset)
+	// 	})
+
+	// 	t.Run("Stat error propagates", func(t *testing.T) {
+	// 		fs := getMockedFs(t)
+	// 		f := getMockedFile("testfile", os.O_RDWR, fs)
+	// 		fs.manager.(*mocks.ObjectManager).
+	// 			On("GetObjectMeta", mock.Anything, mock.Anything, mock.Anything).
+	// 			Return(nil, syscall.EIO)
+
+	//		_, err := f.Seek(0, io.SeekStart)
+	//		assert.Error(t, err)
+	//		assert.Equal(t, syscall.EIO, err)
+	//	})
+}
+
+func TestFileDoWriteAt(t *testing.T) {
+	t.Run("WriteAt on dir return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("/path/to/dir/", os.O_WRONLY, fs)
+		f.isDir = true
+
+		p := make([]byte, 0)
+		_, e := f.doWriteAt(p, 0)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("WriteAt with preload error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+
+		p := make([]byte, 0)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(f.fs.ctx, f.fs.bucketName, f.name).
+			Return(nil, nil, fmt.Errorf("preload error"))
+
+		_, e := f.doWriteAt(p, 0)
+
+		assert.Error(t, e)
+		assert.Equal(t, "preload error", e.Error())
+	})
+
+	t.Run("WriteAt success", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
+			Return(strings.NewReader(""), utils.CleanUp(func() {}), nil)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			PutObject(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(true, nil)
+
+		fs.preloadFs = afero.NewMemMapFs()
+		defer fs.preloadFs.Remove(f.name)
+
+		p := []byte("test data")
+		n, e := f.doWriteAt(p, 0)
+
+		assert.Nil(t, e)
+		assert.Equal(t, len(p), n)
+		assert.True(t, f.dirty)
+
+		f.preloadedFd.Seek(0, io.SeekStart)
+		s, _ := io.ReadAll(f.preloadedFd)
+		assert.Equal(t, "test data", string(s))
+	})
+
+	t.Run("WriteAt at non zero position success", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
+			Return(strings.NewReader("abcdefg"), utils.CleanUp(func() {}), nil)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			PutObject(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(true, nil)
+
+		fs.preloadFs = afero.NewMemMapFs()
+		defer fs.preloadFs.Remove(f.name)
+
+		n, e := f.doWriteAt([]byte("ABCD"), 2)
+
+		assert.Equal(t, 4, n)
+		assert.NoError(t, e)
+
+		f.preloadedFd.Seek(0, io.SeekStart)
+		s, _ := io.ReadAll(f.preloadedFd)
+
+		assert.Equal(t, "abABCDg", string(s))
 	})
 }

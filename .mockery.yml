@@ -1,0 +1,16 @@
+dir: "internal/mocks"
+filename: "mock_{{.InterfaceName}}.go"
+formatter: goimports
+force-file-write: false
+log-level: debug
+pkgname: 'mocks'
+recursive: true
+template: testify
+template-schema: '{{.Template}}.schema.json'
+packages:
+  github.com/messikiller/afero-oss:
+    config:
+      all: true
+  io/fs:
+    interfaces:
+      FileInfo:

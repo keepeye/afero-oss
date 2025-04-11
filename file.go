@@ -1,10 +1,9 @@
 package ossfs
 
 import (
-	"errors"
+	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"sync"
 	"syscall"
 
@@ -149,7 +148,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		newOffset = max + offset
 	default:
-		return 0, errors.New("Invalid whence value: " + strconv.Itoa(whence))
+		return 0, fmt.Errorf("invalid whence value: %v", whence)
 	}
 	if newOffset < 0 || newOffset > max {
 		return 0, afero.ErrOutOfRange

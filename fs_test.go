@@ -93,7 +93,7 @@ func TestFsWithContext(t *testing.T) {
 }
 
 func TestFsCreate(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -105,7 +105,10 @@ func TestFsCreate(t *testing.T) {
 	}
 
 	t.Run("create simple success", func(t *testing.T) {
-		m.On("PutObject", fs.ctx, bucket, "test.txt", strings.NewReader("")).Return(true, nil).Once()
+		m.EXPECT().
+			PutObject(fs.ctx, bucket, "test.txt", strings.NewReader("")).
+			Return(true, nil).
+			Once()
 		file, err := fs.Create("test.txt")
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
@@ -114,8 +117,8 @@ func TestFsCreate(t *testing.T) {
 	})
 
 	t.Run("create prefixed file path success", func(t *testing.T) {
-		m.
-			On("PutObject", fs.ctx, bucket, "path/to/test.txt", strings.NewReader("")).
+		m.EXPECT().
+			PutObject(fs.ctx, bucket, "path/to/test.txt", strings.NewReader("")).
 			Return(true, nil).
 			Once()
 		file, err := fs.Create("/path/to/test.txt")
@@ -126,10 +129,11 @@ func TestFsCreate(t *testing.T) {
 	})
 
 	t.Run("create dir path success", func(t *testing.T) {
-		m.
-			On("PutObject", ctx, bucket, "path/to/test_dir/", strings.NewReader("")).
+		m.EXPECT().
+			PutObject(ctx, bucket, "path/to/test_dir/", strings.NewReader("")).
 			Return(true, nil).
 			Once()
+
 		file, err := fs.Create("/path/to/test_dir/")
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
@@ -139,7 +143,10 @@ func TestFsCreate(t *testing.T) {
 	})
 
 	t.Run("create failure", func(t *testing.T) {
-		m.On("PutObject", fs.ctx, bucket, "test2.txt", strings.NewReader("")).Return(false, afero.ErrFileNotFound).Once()
+		m.EXPECT().
+			PutObject(fs.ctx, bucket, "test2.txt", strings.NewReader("")).
+			Return(false, afero.ErrFileNotFound).
+			Once()
 		_, err := fs.Create("test2.txt")
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, afero.ErrFileNotFound)
@@ -148,7 +155,7 @@ func TestFsCreate(t *testing.T) {
 }
 
 func TestFsMkdirAll(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -160,8 +167,8 @@ func TestFsMkdirAll(t *testing.T) {
 	}
 
 	t.Run("MkDirAll simple success", func(t *testing.T) {
-		m.
-			On("PutObject", fs.ctx, bucket, "path/to/test_dir/", strings.NewReader("")).
+		m.EXPECT().
+			PutObject(fs.ctx, bucket, "path/to/test_dir/", strings.NewReader("")).
 			Return(true, nil).
 			Once()
 		err := fs.MkdirAll("/path/to/test_dir/", defaultFileMode)
@@ -170,8 +177,8 @@ func TestFsMkdirAll(t *testing.T) {
 	})
 
 	t.Run("MkDirAll failure", func(t *testing.T) {
-		m.
-			On("PutObject", fs.ctx, bucket, "path/to/test_dir/", strings.NewReader("")).
+		m.EXPECT().
+			PutObject(fs.ctx, bucket, "path/to/test_dir/", strings.NewReader("")).
 			Return(false, afero.ErrFileClosed).
 			Once()
 		err := fs.MkdirAll("/path/to/test_dir/", defaultFileMode)
@@ -182,7 +189,7 @@ func TestFsMkdirAll(t *testing.T) {
 }
 
 func TestFsOpenFile(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -195,7 +202,10 @@ func TestFsOpenFile(t *testing.T) {
 	}
 
 	t.Run("open existing file success", func(t *testing.T) {
-		m.On("IsObjectExist", ctx, bucket, "test.txt").Return(true, nil).Once()
+		m.EXPECT().
+			IsObjectExist(ctx, bucket, "test.txt").
+			Return(true, nil).
+			Once()
 		file, err := fs.OpenFile("test.txt", os.O_RDONLY, 0o644)
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
@@ -204,8 +214,14 @@ func TestFsOpenFile(t *testing.T) {
 	})
 
 	t.Run("open non-existing file with create flag success", func(t *testing.T) {
-		m.On("IsObjectExist", ctx, bucket, "new.txt").Return(false, nil).Once()
-		m.On("PutObject", ctx, bucket, "new.txt", strings.NewReader("")).Return(true, nil).Once()
+		m.EXPECT().
+			IsObjectExist(ctx, bucket, "new.txt").
+			Return(false, nil).
+			Once()
+		m.EXPECT().
+			PutObject(ctx, bucket, "new.txt", strings.NewReader("")).
+			Return(true, nil).
+			Once()
 		file, err := fs.OpenFile("new.txt", os.O_CREATE|os.O_RDWR, 0o644)
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
@@ -214,8 +230,14 @@ func TestFsOpenFile(t *testing.T) {
 	})
 
 	t.Run("open file with truncate flag success", func(t *testing.T) {
-		m.On("IsObjectExist", ctx, bucket, "trunc.txt").Return(true, nil).Once()
-		m.On("PutObject", ctx, bucket, "trunc.txt", strings.NewReader("")).Return(true, nil).Once()
+		m.EXPECT().
+			IsObjectExist(ctx, bucket, "trunc.txt").
+			Return(true, nil).
+			Once()
+		m.EXPECT().
+			PutObject(ctx, bucket, "trunc.txt", strings.NewReader("")).
+			Return(true, nil).
+			Once()
 		file, err := fs.OpenFile("trunc.txt", os.O_TRUNC|os.O_RDWR, 0o644)
 		assert.Nil(t, err)
 		assert.NotNil(t, file)
@@ -233,7 +255,10 @@ func TestFsOpenFile(t *testing.T) {
 	})
 
 	t.Run("open non-existing file without create flag fails", func(t *testing.T) {
-		m.On("IsObjectExist", ctx, bucket, "nonexist.txt").Return(false, nil).Once()
+		m.EXPECT().
+			IsObjectExist(ctx, bucket, "nonexist.txt").
+			Return(false, nil).
+			Once()
 		_, err := fs.OpenFile("nonexist.txt", os.O_RDONLY, 0o644)
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, afero.ErrFileNotFound)
@@ -241,7 +266,10 @@ func TestFsOpenFile(t *testing.T) {
 	})
 
 	t.Run("open file with check exist error fails", func(t *testing.T) {
-		m.On("IsObjectExist", ctx, bucket, "error.txt").Return(false, afero.ErrFileNotFound).Once()
+		m.EXPECT().
+			IsObjectExist(ctx, bucket, "error.txt").
+			Return(false, afero.ErrFileNotFound).
+			Once()
 		_, err := fs.OpenFile("error.txt", os.O_RDONLY, 0o644)
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, afero.ErrFileNotFound)
@@ -250,7 +278,7 @@ func TestFsOpenFile(t *testing.T) {
 }
 
 func TestFsRemove(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -262,21 +290,21 @@ func TestFsRemove(t *testing.T) {
 	}
 
 	t.Run("remove file success", func(t *testing.T) {
-		m.On("DeleteObject", fs.ctx, bucket, "test.txt").Return(nil).Once()
+		m.EXPECT().DeleteObject(fs.ctx, bucket, "test.txt").Return(nil).Once()
 		err := fs.Remove("test.txt")
 		assert.Nil(t, err)
 		m.AssertExpectations(t)
 	})
 
 	t.Run("remove prefixed file success", func(t *testing.T) {
-		m.On("DeleteObject", fs.ctx, bucket, "path/to/test.txt").Return(nil).Once()
+		m.EXPECT().DeleteObject(fs.ctx, bucket, "path/to/test.txt").Return(nil).Once()
 		err := fs.Remove("/path/to/test.txt")
 		assert.Nil(t, err)
 		m.AssertExpectations(t)
 	})
 
 	t.Run("remove non-existent file", func(t *testing.T) {
-		m.On("DeleteObject", fs.ctx, bucket, "nonexistent.txt").Return(afero.ErrFileNotFound).Once()
+		m.EXPECT().DeleteObject(fs.ctx, bucket, "nonexistent.txt").Return(afero.ErrFileNotFound).Once()
 		err := fs.Remove("nonexistent.txt")
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, afero.ErrFileNotFound)
@@ -285,7 +313,7 @@ func TestFsRemove(t *testing.T) {
 }
 
 func TestFsRemoveAll(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -304,10 +332,10 @@ func TestFsRemoveAll(t *testing.T) {
 			NewFileInfo("path/to/dir/subdir/", 0, time.Now()),
 		}
 
-		m.On("ListAllObjects", ctx, bucket, dirPath).Return(files, nil).Once()
-		m.On("DeleteObject", ctx, bucket, "path/to/dir/file1.txt").Return(nil).Once()
-		m.On("DeleteObject", ctx, bucket, "path/to/dir/file2.txt").Return(nil).Once()
-		m.On("DeleteObject", ctx, bucket, "path/to/dir/subdir/").Return(nil).Once()
+		m.EXPECT().ListAllObjects(ctx, bucket, dirPath).Return(files, nil).Once()
+		m.EXPECT().DeleteObject(ctx, bucket, "path/to/dir/file1.txt").Return(nil).Once()
+		m.EXPECT().DeleteObject(ctx, bucket, "path/to/dir/file2.txt").Return(nil).Once()
+		m.EXPECT().DeleteObject(ctx, bucket, "path/to/dir/subdir/").Return(nil).Once()
 
 		err := fs.RemoveAll(dirPath)
 		assert.Nil(t, err)
@@ -316,7 +344,7 @@ func TestFsRemoveAll(t *testing.T) {
 
 	t.Run("remove empty directory", func(t *testing.T) {
 		dirPath := "empty/dir/"
-		m.On("ListAllObjects", ctx, bucket, dirPath).Return([]os.FileInfo{}, nil).Once()
+		m.EXPECT().ListAllObjects(ctx, bucket, dirPath).Return([]os.FileInfo{}, nil).Once()
 
 		err := fs.RemoveAll(dirPath)
 		assert.Nil(t, err)
@@ -325,7 +353,7 @@ func TestFsRemoveAll(t *testing.T) {
 
 	t.Run("remove non-existent path", func(t *testing.T) {
 		nonExistentPath := "nonexistent/path/"
-		m.On("ListAllObjects", ctx, bucket, nonExistentPath).Return([]os.FileInfo{}, nil).Once()
+		m.EXPECT().ListAllObjects(ctx, bucket, nonExistentPath).Return([]os.FileInfo{}, nil).Once()
 
 		err := fs.RemoveAll(nonExistentPath)
 		assert.Nil(t, err)
@@ -334,7 +362,7 @@ func TestFsRemoveAll(t *testing.T) {
 
 	t.Run("list objects failure", func(t *testing.T) {
 		dirPath := "path/to/dir/"
-		m.On("ListAllObjects", ctx, bucket, dirPath).Return(nil, afero.ErrFileNotFound).Once()
+		m.EXPECT().ListAllObjects(ctx, bucket, dirPath).Return(nil, afero.ErrFileNotFound).Once()
 
 		err := fs.RemoveAll(dirPath)
 		assert.NotNil(t, err)
@@ -348,8 +376,8 @@ func TestFsRemoveAll(t *testing.T) {
 			NewFileInfo("path/to/dir/file1.txt", 0, time.Now()),
 		}
 
-		m.On("ListAllObjects", ctx, bucket, dirPath).Return(files, nil).Once()
-		m.On("DeleteObject", ctx, bucket, "path/to/dir/file1.txt").Return(afero.ErrFileNotFound).Once()
+		m.EXPECT().ListAllObjects(ctx, bucket, dirPath).Return(files, nil).Once()
+		m.EXPECT().DeleteObject(ctx, bucket, "path/to/dir/file1.txt").Return(afero.ErrFileNotFound).Once()
 
 		err := fs.RemoveAll(dirPath)
 		assert.NotNil(t, err)
@@ -359,7 +387,7 @@ func TestFsRemoveAll(t *testing.T) {
 }
 
 func TestFsRename(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -374,8 +402,8 @@ func TestFsRename(t *testing.T) {
 		oldname := "old/file.txt"
 		newname := "new/file.txt"
 
-		m.On("CopyObject", ctx, bucket, oldname, newname).Return(nil).Once()
-		m.On("DeleteObject", ctx, bucket, oldname).Return(nil).Once()
+		m.EXPECT().CopyObject(ctx, bucket, oldname, newname).Return(nil).Once()
+		m.EXPECT().DeleteObject(ctx, bucket, oldname).Return(nil).Once()
 
 		err := fs.Rename(oldname, newname)
 		assert.Nil(t, err)
@@ -386,7 +414,7 @@ func TestFsRename(t *testing.T) {
 		oldname := "old/file.txt"
 		newname := "new/file.txt"
 
-		m.On("CopyObject", ctx, bucket, oldname, newname).Return(afero.ErrFileNotFound).Once()
+		m.EXPECT().CopyObject(ctx, bucket, oldname, newname).Return(afero.ErrFileNotFound).Once()
 
 		err := fs.Rename(oldname, newname)
 		assert.NotNil(t, err)
@@ -398,8 +426,8 @@ func TestFsRename(t *testing.T) {
 		oldname := "old/file.txt"
 		newname := "new/file.txt"
 
-		m.On("CopyObject", ctx, bucket, oldname, newname).Return(nil).Once()
-		m.On("DeleteObject", ctx, bucket, oldname).Return(afero.ErrFileNotFound).Once()
+		m.EXPECT().CopyObject(ctx, bucket, oldname, newname).Return(nil).Once()
+		m.EXPECT().DeleteObject(ctx, bucket, oldname).Return(afero.ErrFileNotFound).Once()
 
 		err := fs.Rename(oldname, newname)
 		assert.NotNil(t, err)
@@ -409,7 +437,7 @@ func TestFsRename(t *testing.T) {
 }
 
 func TestFsStat(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -421,8 +449,8 @@ func TestFsStat(t *testing.T) {
 	}
 
 	t.Run("stat file success", func(t *testing.T) {
-		expectedInfo := &mocks.FileInfo{}
-		m.On("GetObjectMeta", fs.ctx, bucket, "test.txt").Return(expectedInfo, nil).Once()
+		expectedInfo := mocks.NewMockFileInfo(t)
+		m.EXPECT().GetObjectMeta(fs.ctx, bucket, "test.txt").Return(expectedInfo, nil).Once()
 		info, err := fs.Stat("test.txt")
 		assert.Nil(t, err)
 		assert.Equal(t, expectedInfo, info)
@@ -430,8 +458,8 @@ func TestFsStat(t *testing.T) {
 	})
 
 	t.Run("stat prefixed file path success", func(t *testing.T) {
-		expectedInfo := &mocks.FileInfo{}
-		m.On("GetObjectMeta", fs.ctx, bucket, "path/to/test.txt").Return(expectedInfo, nil).Once()
+		expectedInfo := mocks.NewMockFileInfo(t)
+		m.EXPECT().GetObjectMeta(fs.ctx, bucket, "path/to/test.txt").Return(expectedInfo, nil).Once()
 		info, err := fs.Stat("/path/to/test.txt")
 		assert.Nil(t, err)
 		assert.Equal(t, expectedInfo, info)
@@ -439,8 +467,8 @@ func TestFsStat(t *testing.T) {
 	})
 
 	t.Run("stat dir path success", func(t *testing.T) {
-		expectedInfo := &mocks.FileInfo{}
-		m.On("GetObjectMeta", fs.ctx, bucket, "path/to/dir/").Return(expectedInfo, nil).Once()
+		expectedInfo := mocks.NewMockFileInfo(t)
+		m.EXPECT().GetObjectMeta(fs.ctx, bucket, "path/to/dir/").Return(expectedInfo, nil).Once()
 		info, err := fs.Stat("/path/to/dir/")
 		assert.Nil(t, err)
 		assert.Equal(t, expectedInfo, info)
@@ -448,7 +476,7 @@ func TestFsStat(t *testing.T) {
 	})
 
 	t.Run("stat non-existent file", func(t *testing.T) {
-		m.On("GetObjectMeta", fs.ctx, bucket, "nonexistent.txt").Return(nil, os.ErrNotExist).Once()
+		m.EXPECT().GetObjectMeta(fs.ctx, bucket, "nonexistent.txt").Return(nil, os.ErrNotExist).Once()
 		_, err := fs.Stat("nonexistent.txt")
 		assert.NotNil(t, err)
 		assert.ErrorIs(t, err, os.ErrNotExist)
@@ -463,7 +491,7 @@ func TestFsName(t *testing.T) {
 }
 
 func TestFsChmod(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -482,7 +510,7 @@ func TestFsChmod(t *testing.T) {
 }
 
 func TestFsChown(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
@@ -501,7 +529,7 @@ func TestFsChown(t *testing.T) {
 }
 
 func TestFsChtimes(t *testing.T) {
-	m := &mocks.ObjectManager{}
+	m := mocks.NewMockObjectManager(t)
 	bucket := "test-bucket"
 	ctx := context.TODO()
 
