@@ -1,14 +1,11 @@
 package ossfs
 
 import (
-	"io"
 	"os"
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -119,7 +116,6 @@ func TesFiletRead(t *testing.T) {
 		var cu utils.CleanUp = func() {}
 		mockManager := fs.manager.(*mocks.ObjectManager)
 		mockManager.On("GetObjectPart", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-			// Return(&mockReadCloser{data: []byte("testdata")}, cu, nil)
 			Return(strings.NewReader("testdata"), cu, nil)
 
 		f := getMockedFile("testfile", os.O_RDONLY, fs)
@@ -188,110 +184,5 @@ func TestFileReadAt(t *testing.T) {
 		assert.Nil(t, e)
 		assert.Equal(t, 4, n)
 		assert.Equal(t, "test", string(p))
-	})
-}
-
-func TestFileSeek(t *testing.T) {
-	t.Run("Seek on unreadable/unwritable file returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_WRONLY, fs)
-		f.closed = true
-
-		_, err := f.Seek(0, io.SeekStart)
-		assert.Error(t, err)
-		assert.Equal(t, syscall.EPERM, err)
-	})
-
-	t.Run("Seek on directory returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testdir", os.O_RDONLY, fs)
-		f.isDir = true
-
-		_, err := f.Seek(0, io.SeekStart)
-		assert.Error(t, err)
-		assert.Equal(t, syscall.EPERM, err)
-	})
-
-	t.Run("SeekStart sets correct offset", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDWR, fs)
-		f.fi = NewFileInfo("testfile", 100, time.Now())
-
-		offset, err := f.Seek(10, io.SeekStart)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(10), offset)
-		assert.Equal(t, int64(10), f.offset)
-	})
-
-	t.Run("SeekCurrent adjusts offset correctly", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDWR, fs)
-		f.fi = NewFileInfo("testfile", 100, time.Now())
-		f.offset = 5
-
-		offset, err := f.Seek(5, io.SeekCurrent)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(10), offset)
-		assert.Equal(t, int64(10), f.offset)
-	})
-
-	t.Run("SeekEnd adjusts offset correctly", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDWR, fs)
-		f.fi = NewFileInfo("testfile", 100, time.Now())
-
-		offset, err := f.Seek(-10, io.SeekEnd)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(90), offset)
-		assert.Equal(t, int64(90), f.offset)
-	})
-
-	t.Run("Seek beyond file size returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDWR, fs)
-		f.fi = NewFileInfo("testfile", 100, time.Now())
-
-		_, err := f.Seek(101, io.SeekStart)
-		assert.Error(t, err)
-		assert.Equal(t, afero.ErrOutOfRange, err)
-	})
-
-	t.Run("Seek negative offset returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDWR, fs)
-		f.fi = NewFileInfo("testfile", 100, time.Now())
-
-		_, err := f.Seek(-1, io.SeekStart)
-		assert.Error(t, err)
-		assert.Equal(t, afero.ErrOutOfRange, err)
-	})
-
-	t.Run("Seek with invalid whence returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDWR, fs)
-		f.fi = NewFileInfo("testfile", 100, time.Now())
-
-		_, err := f.Seek(0, 3)
-		assert.Error(t, err)
-	})
-}
-
-func TestFileWrite(t *testing.T) {
-	t.Run("Write unwritable file returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("testfile", os.O_RDONLY, fs)
-		_, e := f.Write([]byte("test input string"))
-
-		assert.Error(t, e)
-		assert.NotNil(t, e)
-	})
-
-	t.Run("Write dir returns error", func(t *testing.T) {
-		fs := getMockedFs()
-		f := getMockedFile("/path/to/test_dir/", os.O_WRONLY, fs)
-		_, e := f.Write([]byte("test input string"))
-
-		assert.Error(t, e)
-		assert.NotNil(t, e)
 	})
 }

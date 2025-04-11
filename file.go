@@ -5,22 +5,30 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"sync"
 	"syscall"
 
 	"github.com/spf13/afero"
 )
 
 type File struct {
-	name        string
-	fs          *Fs
-	openFlag    int
-	offset      int64
-	fi          os.FileInfo
-	dirty       bool
-	closed      bool
-	isDir       bool
+	name     string
+	fs       *Fs
+	openFlag int
+	offset   int64
+	isDir    bool
+
+	// Whether the file is written.
+	dirty bool
+
+	// Whether the file is closed.
+	closed bool
+
+	// Whether the file is preloaded downto local.
 	preloaded   bool
 	preloadedFd afero.File
+
+	mu sync.RWMutex
 }
 
 func NewOssFile(name string, flag int, fs *Fs) (*File, error) {
@@ -38,6 +46,9 @@ func NewOssFile(name string, flag int, fs *Fs) (*File, error) {
 }
 
 func (f *File) preload() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	pfs := f.fs.preloadFs
 	if _, err := pfs.Stat(f.name); err == nil {
 		if e := pfs.Remove(f.name); e != nil {
@@ -68,23 +79,14 @@ func (f *File) preload() error {
 	return nil
 }
 
-func (f *File) freshFileInfo() error {
-	fi, err := f.fs.Stat(f.name)
-	if err != nil {
-		return err
-	}
-	f.fi = fi
-	f.dirty = false
-	return nil
-}
-
 func (f *File) getFileInfo() (os.FileInfo, error) {
 	if f.dirty {
-		if err := f.freshFileInfo(); err != nil {
-			return nil, err
+		if f.preloadedFd == nil {
+			return nil, syscall.EACCES
 		}
+		return f.preloadedFd.Stat()
 	}
-	return f.fi, nil
+	return f.fs.Stat(f.name)
 }
 
 func (f *File) isReadable() bool {
@@ -107,6 +109,8 @@ func (f *File) Read(p []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.offset += int64(n)
 	return n, err
 }
@@ -131,6 +135,10 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	max := fi.Size()
 	var newOffset int64
 	switch whence {
@@ -150,24 +158,20 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	return f.offset, nil
 }
 
-func (f *File) doAppend(p []byte) (int, error) {
-	if !f.isWriteable() {
-		return 0, syscall.EPERM
-	}
-	fi, err := f.getFileInfo()
-	if err != nil {
-		return 0, err
-	}
-	return f.doWriteAt(p, fi.Size())
-}
-
 func (f *File) Write(p []byte) (int, error) {
 	if !f.isWriteable() {
 		return 0, syscall.EPERM
 	}
 	if f.isAppendOnly() {
-		return f.doAppend(p)
+		fi, err := f.getFileInfo()
+		if err != nil {
+			return 0, err
+		}
+		return f.doWriteAt(p, fi.Size())
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	n, e := f.doWriteAt(p, f.offset)
 	if e != nil {
 		return 0, e
@@ -199,12 +203,19 @@ func (f *File) WriteAt(p []byte, off int64) (int, error) {
 	if !f.isWriteable() || f.isAppendOnly() {
 		return 0, syscall.EPERM
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.doWriteAt(p, off)
 }
 
 func (f *File) Close() error {
-	f.Sync()
-	f.closed = true
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	err := f.Sync()
+	if err != nil {
+		return err
+	}
 	delete(f.fs.openedFiles, f.name)
 	if f.preloaded {
 		err := f.fs.preloadFs.Remove(f.name)
@@ -218,6 +229,8 @@ func (f *File) Close() error {
 		f.preloadedFd = nil
 		f.preloaded = false
 	}
+	f.dirty = false
+	f.closed = true
 	return nil
 }
 
@@ -243,6 +256,8 @@ func (f *File) Readdirnames(n int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var fNames []string
 	for _, fi := range fis {
 		fNames = append(fNames, fi.Name())
@@ -252,23 +267,12 @@ func (f *File) Readdirnames(n int) ([]string, error) {
 }
 
 func (f *File) Stat() (os.FileInfo, error) {
-	if f.dirty {
-		err := f.freshFileInfo()
-		if err != nil {
-			return nil, err
-		}
-	}
-	return f.fi, nil
+	return f.getFileInfo()
 }
 
 func (f *File) Sync() error {
 	if f.preloaded {
 		if _, err := f.fs.manager.PutObject(f.fs.ctx, f.fs.bucketName, f.name, f.preloadedFd); err != nil {
-			return err
-		}
-	}
-	if f.dirty {
-		if err := f.freshFileInfo(); err != nil {
 			return err
 		}
 	}
