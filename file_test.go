@@ -82,6 +82,38 @@ func TestNewOssFile(t *testing.T) {
 	})
 }
 
+func TestFileIsReadable(t *testing.T) {
+	fs := getMockedFs(t)
+	f := getMockedFile("testfile", defaultFileFlag, fs)
+
+	failCases := []int{
+		os.O_CREATE,
+		os.O_APPEND,
+		os.O_WRONLY,
+		os.O_WRONLY | os.O_APPEND,
+	}
+
+	for _, c := range failCases {
+		f.openFlag = c
+		assert.False(t, f.isReadable())
+	}
+
+	trueCases := []int{
+		os.O_RDONLY,
+		os.O_RDWR,
+		os.O_RDONLY | os.O_CREATE,
+		os.O_RDWR | os.O_CREATE | os.O_EXCL,
+	}
+
+	for _, c := range trueCases {
+		f.openFlag = c
+		assert.True(t, f.isReadable())
+	}
+}
+
+func TestFileIsWritable(t *testing.T) {
+}
+
 func TesFileRead(t *testing.T) {
 	t.Run("Read with unreadable flag return error", func(t *testing.T) {
 		fs := getMockedFs(t)
@@ -406,5 +438,95 @@ func TestFileDoWriteAt(t *testing.T) {
 		s, _ := io.ReadAll(f.preloadedFd)
 
 		assert.Equal(t, "abABCDg", string(s))
+	})
+}
+
+func TestFileWrite(t *testing.T) {
+	t.Run("Write with unwritable flag return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDONLY, fs)
+
+		p := []byte("test")
+		_, e := f.Write(p)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("Write on directory return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testdir", os.O_WRONLY, fs)
+		f.isDir = true
+
+		p := []byte("test")
+		_, e := f.Write(p)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("Write on closed file return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+		f.closed = true
+
+		p := []byte("test")
+		_, e := f.Write(p)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("Successful write updates offset", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+		fs.preloadFs = afero.NewMemMapFs()
+		defer fs.preloadFs.Remove("testfile")
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
+			Return(strings.NewReader(""), utils.CleanUp(func() {}), nil)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			PutObject(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(true, nil)
+
+		p := []byte("testdata")
+		n, err := f.Write(p)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 8, n)
+		assert.Equal(t, int64(8), f.offset)
+		assert.True(t, f.dirty)
+
+		f.preloadedFd.Seek(0, io.SeekStart)
+		s, _ := io.ReadAll(f.preloadedFd)
+		assert.Equal(t, "testdata", string(s))
+	})
+
+	t.Run("Append mode writes at end of file", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY|os.O_APPEND, fs)
+		fs.preloadFs = afero.NewMemMapFs()
+		defer fs.preloadFs.Remove("testfile")
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
+			Return(strings.NewReader(""), utils.CleanUp(func() {}), nil)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			PutObject(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(true, nil)
+
+		p := []byte("data")
+		n, err := f.Write(p)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 4, n)
+		assert.Equal(t, int64(11), f.offset)
 	})
 }

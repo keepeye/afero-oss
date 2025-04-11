@@ -89,11 +89,11 @@ func (f *File) getFileInfo() (os.FileInfo, error) {
 }
 
 func (f *File) isReadable() bool {
-	return !f.closed && (f.openFlag == os.O_RDONLY || f.openFlag == os.O_RDWR)
+	return !f.closed && (f.openFlag&os.O_RDONLY != 0 || f.openFlag&os.O_RDWR != 0)
 }
 
 func (f *File) isWriteable() bool {
-	return !f.closed && (f.openFlag == os.O_WRONLY || f.openFlag == os.O_RDWR)
+	return !f.closed && (f.openFlag&os.O_WRONLY != 0 || f.openFlag&os.O_RDWR != 0)
 }
 
 func (f *File) isAppendOnly() bool {
@@ -168,8 +168,8 @@ func (f *File) Write(p []byte) (int, error) {
 		}
 		return f.doWriteAt(p, fi.Size())
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	// f.mu.Lock()
+	// defer f.mu.Unlock()
 
 	n, e := f.doWriteAt(p, f.offset)
 	if e != nil {
