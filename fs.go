@@ -47,6 +47,11 @@ func NewOssFs(accessKeyId, accessKeySecret, region, bucket string) *Fs {
 	}
 }
 
+func (fs *Fs) WithPreloadFs(pfs afero.Fs) *Fs {
+	fs.preloadFs = pfs
+	return fs
+}
+
 func (fs *Fs) WithContext(ctx context.Context) *Fs {
 	fs.ctx = ctx
 	return fs
