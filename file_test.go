@@ -87,15 +87,10 @@ func TestFileIsReadable(t *testing.T) {
 	f := getMockedFile("testfile", defaultFileFlag, fs)
 
 	failCases := []int{
-		os.O_CREATE,
-		os.O_APPEND,
 		os.O_WRONLY,
 		os.O_WRONLY | os.O_APPEND,
-	}
-
-	for _, c := range failCases {
-		f.openFlag = c
-		assert.False(t, f.isReadable())
+		os.O_WRONLY | os.O_CREATE,
+		os.O_WRONLY | os.O_APPEND | os.O_EXCL,
 	}
 
 	trueCases := []int{
@@ -103,15 +98,75 @@ func TestFileIsReadable(t *testing.T) {
 		os.O_RDWR,
 		os.O_RDONLY | os.O_CREATE,
 		os.O_RDWR | os.O_CREATE | os.O_EXCL,
+		os.O_RDWR | os.O_APPEND,
+		os.O_APPEND,
+		os.O_EXCL | os.O_TRUNC,
 	}
 
-	for _, c := range trueCases {
-		f.openFlag = c
-		assert.True(t, f.isReadable())
-	}
+	t.Run("unreadable flags return false", func(t *testing.T) {
+		for i, c := range failCases {
+			f.openFlag = c
+			assert.False(t, f.isReadable(), fmt.Sprintf("false case failed: %v", i))
+		}
+	})
+
+	t.Run("readable flags return true", func(t *testing.T) {
+		for i, c := range trueCases {
+			f.openFlag = c
+			assert.True(t, f.isReadable(), fmt.Sprintf("true case failed: %v", i))
+		}
+	})
+
+	t.Run("closed file return false", func(t *testing.T) {
+		f.closed = true
+		for _, c := range trueCases {
+			f.openFlag = c
+			assert.False(t, f.isReadable())
+		}
+	})
 }
 
 func TestFileIsWritable(t *testing.T) {
+	fs := getMockedFs(t)
+	f := getMockedFile("testfile", defaultFileFlag, fs)
+
+	trueCases := []int{
+		os.O_WRONLY,
+		os.O_WRONLY | os.O_APPEND,
+		os.O_WRONLY | os.O_CREATE,
+		os.O_WRONLY | os.O_APPEND | os.O_EXCL,
+		os.O_RDWR,
+		os.O_RDWR | os.O_APPEND,
+	}
+
+	failCases := []int{
+		os.O_RDONLY,
+		os.O_RDONLY | os.O_CREATE,
+		os.O_RDONLY | os.O_CREATE | os.O_EXCL,
+		os.O_RDONLY | os.O_TRUNC,
+	}
+
+	t.Run("unwritable flags return false", func(t *testing.T) {
+		for i, c := range failCases {
+			f.openFlag = c
+			assert.False(t, f.isWriteable(), fmt.Sprintf("false case failed: %v", i))
+		}
+	})
+
+	t.Run("writable flags return true", func(t *testing.T) {
+		for i, c := range trueCases {
+			f.openFlag = c
+			assert.True(t, f.isWriteable(), fmt.Sprintf("true case failed: %v", i))
+		}
+	})
+
+	t.Run("closed file return false", func(t *testing.T) {
+		f.closed = true
+		for _, c := range trueCases {
+			f.openFlag = c
+			assert.False(t, f.isWriteable())
+		}
+	})
 }
 
 func TesFileRead(t *testing.T) {
@@ -511,22 +566,172 @@ func TestFileWrite(t *testing.T) {
 		f := getMockedFile("testfile", os.O_WRONLY|os.O_APPEND, fs)
 		fs.preloadFs = afero.NewMemMapFs()
 		defer fs.preloadFs.Remove("testfile")
+		fi := getMockedFileInfo(t)
+
+		originalContent := "this is original content"
+
+		fi.EXPECT().Size().Return(int64(len(originalContent)))
 
 		fs.manager.(*mocks.MockObjectManager).
 			EXPECT().
 			GetObject(mock.Anything, mock.Anything, mock.Anything).
-			Return(strings.NewReader(""), utils.CleanUp(func() {}), nil)
+			Return(strings.NewReader(originalContent), utils.CleanUp(func() {}), nil)
 
 		fs.manager.(*mocks.MockObjectManager).
 			EXPECT().
 			PutObject(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(true, nil)
 
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObjectMeta(mock.Anything, mock.Anything, mock.Anything).
+			Return(fi, nil)
+
 		p := []byte("data")
 		n, err := f.Write(p)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 4, n)
-		assert.Equal(t, int64(11), f.offset)
+		assert.Equal(t, int64(0), f.offset)
+
+		f.preloadedFd.Seek(0, io.SeekStart)
+		s, _ := io.ReadAll(f.preloadedFd)
+		assert.Equal(t, originalContent+"data", string(s))
+	})
+}
+
+func TestFileWriteAt(t *testing.T) {
+	t.Run("WriteAt with unwritable flag return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDONLY, fs)
+
+		p := []byte("test")
+		_, e := f.WriteAt(p, 0)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("WriteAt on directory return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testdir", os.O_WRONLY, fs)
+		f.isDir = true
+
+		p := []byte("test")
+		_, e := f.WriteAt(p, 0)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("WriteAt on closed file return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+		f.closed = true
+
+		p := []byte("test")
+		_, e := f.WriteAt(p, 0)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("WriteAt with append flag return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY|os.O_APPEND, fs)
+
+		p := []byte("test")
+		_, e := f.WriteAt(p, 0)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("Successful WriteAt updates content at offset", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+		fs.preloadFs = afero.NewMemMapFs()
+		defer fs.preloadFs.Remove("testfile")
+
+		originalContent := "original content"
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			GetObject(mock.Anything, mock.Anything, mock.Anything).
+			Return(strings.NewReader(originalContent), utils.CleanUp(func() {}), nil)
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			PutObject(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(true, nil)
+
+		p := []byte("test")
+		n, err := f.WriteAt(p, 8)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 4, n)
+		assert.True(t, f.dirty)
+
+		f.preloadedFd.Seek(0, io.SeekStart)
+		s, _ := io.ReadAll(f.preloadedFd)
+		assert.Equal(t, "originaltesttent", string(s))
+	})
+
+	t.Run("WriteAt with negative offset return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_WRONLY, fs)
+		fs.preloadFs = afero.NewMemMapFs()
+		defer fs.preloadFs.Remove("testfile")
+
+		p := []byte("test")
+		_, err := f.WriteAt(p, -1)
+
+		assert.Error(t, err)
+	})
+}
+
+func TestFileReaddir(t *testing.T) {
+	t.Run("Readdir with unreadable flag return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testdir", os.O_WRONLY, fs)
+		f.isDir = true
+
+		_, e := f.Readdir(10)
+
+		assert.Error(t, e)
+		assert.Equal(t, syscall.EPERM, e)
+	})
+
+	t.Run("Readdir on non-dir return error", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testfile", os.O_RDONLY, fs)
+		f.isDir = false
+
+		_, e := f.Readdir(10)
+
+		assert.Error(t, e)
+	})
+
+	t.Run("Readdir success", func(t *testing.T) {
+		fs := getMockedFs(t)
+		f := getMockedFile("testdir/", os.O_RDONLY, fs)
+
+		fi1 := getMockedFileInfo(t)
+		fi2 := getMockedFileInfo(t)
+
+		expectedFis := []os.FileInfo{
+			fi1,
+			fi2,
+		}
+
+		fs.manager.(*mocks.MockObjectManager).
+			EXPECT().
+			ListObjects(fs.ctx, fs.bucketName, fs.ensureAsDir(f.name), 10).
+			Return(expectedFis, nil)
+
+		fis, e := f.Readdir(10)
+
+		assert.Nil(t, e)
+		assert.Equal(t, len(expectedFis), len(fis))
+		assert.Equal(t, expectedFis, fis)
 	})
 }

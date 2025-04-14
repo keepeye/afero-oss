@@ -27,7 +27,7 @@ type File struct {
 	preloaded   bool
 	preloadedFd afero.File
 
-	mu sync.RWMutex
+	mu sync.Mutex
 }
 
 func NewOssFile(name string, flag int, fs *Fs) (*File, error) {
@@ -45,9 +45,6 @@ func NewOssFile(name string, flag int, fs *Fs) (*File, error) {
 }
 
 func (f *File) preload() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	pfs := f.fs.preloadFs
 	if _, err := pfs.Stat(f.name); err == nil {
 		if e := pfs.Remove(f.name); e != nil {
@@ -89,11 +86,25 @@ func (f *File) getFileInfo() (os.FileInfo, error) {
 }
 
 func (f *File) isReadable() bool {
-	return !f.closed && (f.openFlag&os.O_RDONLY != 0 || f.openFlag&os.O_RDWR != 0)
+	if f.closed {
+		return false
+	}
+	masked := f.openFlag
+	if masked > 0x2 {
+		masked = f.openFlag & 0x3
+	}
+	return masked == os.O_RDONLY || masked == os.O_RDWR
 }
 
 func (f *File) isWriteable() bool {
-	return !f.closed && (f.openFlag&os.O_WRONLY != 0 || f.openFlag&os.O_RDWR != 0)
+	if f.closed {
+		return false
+	}
+	masked := f.openFlag
+	if masked > 0x2 {
+		masked = f.openFlag & 0x3
+	}
+	return masked == os.O_WRONLY || masked == os.O_RDWR
 }
 
 func (f *File) isAppendOnly() bool {
@@ -161,6 +172,10 @@ func (f *File) Write(p []byte) (int, error) {
 	if !f.isWriteable() {
 		return 0, syscall.EPERM
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if f.isAppendOnly() {
 		fi, err := f.getFileInfo()
 		if err != nil {
@@ -168,8 +183,6 @@ func (f *File) Write(p []byte) (int, error) {
 		}
 		return f.doWriteAt(p, fi.Size())
 	}
-	// f.mu.Lock()
-	// defer f.mu.Unlock()
 
 	n, e := f.doWriteAt(p, f.offset)
 	if e != nil {
@@ -201,6 +214,9 @@ func (f *File) doWriteAt(p []byte, off int64) (int, error) {
 func (f *File) WriteAt(p []byte, off int64) (int, error) {
 	if !f.isWriteable() || f.isAppendOnly() {
 		return 0, syscall.EPERM
+	}
+	if off < 0 {
+		return 0, syscall.ERANGE
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -238,7 +254,7 @@ func (f *File) Name() string {
 }
 
 func (f *File) Readdir(count int) ([]os.FileInfo, error) {
-	if !f.isReadable() {
+	if !f.isReadable() || !f.isDir {
 		return nil, syscall.EPERM
 	}
 
@@ -247,7 +263,7 @@ func (f *File) Readdir(count int) ([]os.FileInfo, error) {
 }
 
 func (f *File) Readdirnames(n int) ([]string, error) {
-	if !f.isReadable() {
+	if !f.isReadable() || !f.isDir {
 		return nil, syscall.EPERM
 	}
 
@@ -282,7 +298,8 @@ func (f *File) Truncate(size int64) error {
 	if !f.isWriteable() || f.isDir {
 		return syscall.EPERM
 	}
-	_, err := f.WriteAt([]byte(""), 0)
+	p := make([]byte, size)
+	_, err := f.Write(p)
 	return err
 }
 
