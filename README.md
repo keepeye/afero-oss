@@ -4,6 +4,8 @@
 
 > Based on the project: [spf13/afero](https://github.com/spf13/afero)
 
+> [中文文档](./README_CN.md)
+
 Afero-OSS is an implementation of Alibaba Cloud Object Storage Service (OSS) based on the Afero file system interface. It allows developers to operate Alibaba Cloud OSS as easily as using a local file system, providing a unified and flexible file storage solution.
 
 ## Features
