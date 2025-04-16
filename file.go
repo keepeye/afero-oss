@@ -117,7 +117,7 @@ func (f *File) Read(p []byte) (int, error) {
 	}
 	n, err := f.ReadAt(p, f.offset)
 	if err != nil {
-		return 0, err
+		return n, err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -286,10 +286,13 @@ func (f *File) Stat() (os.FileInfo, error) {
 }
 
 func (f *File) Sync() error {
-	if f.preloaded {
+	if f.preloaded && f.preloadedFd != nil {
+		off, _ := f.preloadedFd.Seek(0, io.SeekCurrent)
+		f.preloadedFd.Seek(0, io.SeekStart)
 		if _, err := f.fs.manager.PutObject(f.fs.ctx, f.fs.bucketName, f.name, f.preloadedFd); err != nil {
 			return err
 		}
+		f.preloadedFd.Seek(off, io.SeekStart)
 	}
 	return nil
 }

@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultFileMode = 0o755
-	defaultFileFlag = os.O_RDWR
+	defaultFileFlag = os.O_RDWR | os.O_CREATE
 )
 
 type Fs struct {
