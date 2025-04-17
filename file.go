@@ -30,6 +30,7 @@ type File struct {
 	mu sync.Mutex
 }
 
+// NewOssFile creates a new File instance, the name of file will be normalized.
 func NewOssFile(name string, flag int, fs *Fs) (*File, error) {
 	return &File{
 		name:        fs.normFileName(name),
@@ -44,6 +45,7 @@ func NewOssFile(name string, flag int, fs *Fs) (*File, error) {
 	}, nil
 }
 
+// preload will preload the file to specific preload-filesystem.
 func (f *File) preload() error {
 	pfs := f.fs.preloadFs
 	if _, err := pfs.Stat(f.name); err == nil {
@@ -75,6 +77,7 @@ func (f *File) preload() error {
 	return nil
 }
 
+// getFileInfo returns the FileInfo of file.
 func (f *File) getFileInfo() (os.FileInfo, error) {
 	if f.dirty {
 		if f.preloadedFd == nil {
@@ -85,6 +88,7 @@ func (f *File) getFileInfo() (os.FileInfo, error) {
 	return f.fs.Stat(f.name)
 }
 
+// isReadable returns whether the file is readable by openFlag of the file instance.
 func (f *File) isReadable() bool {
 	if f.closed {
 		return false
@@ -96,6 +100,7 @@ func (f *File) isReadable() bool {
 	return masked == os.O_RDONLY || masked == os.O_RDWR
 }
 
+// isWriteable returns whether the file is writeable by openFlag of the file instance.
 func (f *File) isWriteable() bool {
 	if f.closed {
 		return false
@@ -107,10 +112,12 @@ func (f *File) isWriteable() bool {
 	return masked == os.O_WRONLY || masked == os.O_RDWR
 }
 
+// isAppendOnly returns whether the file is append-only by openFlag of the file instance.
 func (f *File) isAppendOnly() bool {
 	return f.isWriteable() && f.openFlag&os.O_APPEND != 0
 }
 
+// Read reads up to len(p) bytes from the File, it implements interface: io.Reader.
 func (f *File) Read(p []byte) (int, error) {
 	if !f.isReadable() || f.isDir {
 		return 0, syscall.EPERM
@@ -125,6 +132,8 @@ func (f *File) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// ReadAt reads len(p) bytes from the File starting at byte offset off into p.
+// It implements interface: io.ReaderAt.
 func (f *File) ReadAt(p []byte, off int64) (int, error) {
 	if !f.isReadable() || f.isDir {
 		return 0, syscall.EPERM
@@ -137,6 +146,7 @@ func (f *File) ReadAt(p []byte, off int64) (int, error) {
 	return reader.Read(p)
 }
 
+// Seek sets the offset for the next Read or Write on file to offset,
 func (f *File) Seek(offset int64, whence int) (int64, error) {
 	if (!f.isReadable() && !f.isWriteable()) || f.isDir {
 		return 0, syscall.EPERM
@@ -168,6 +178,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	return f.offset, nil
 }
 
+// Write writes len(p) bytes to the File. It implements interface: io.Writer.
 func (f *File) Write(p []byte) (int, error) {
 	if !f.isWriteable() {
 		return 0, syscall.EPERM
@@ -192,6 +203,7 @@ func (f *File) Write(p []byte) (int, error) {
 	return n, e
 }
 
+// doWriteAt write len(p) bytes at the offset of the File. It will preload file into preload-filesystem.
 func (f *File) doWriteAt(p []byte, off int64) (int, error) {
 	if f.isDir {
 		return 0, syscall.EPERM
@@ -211,6 +223,8 @@ func (f *File) doWriteAt(p []byte, off int64) (int, error) {
 	return n, e
 }
 
+// WriteAt writes len(p) bytes to the File starting at byte offset off.
+// It implements interface: io.WriterAt.
 func (f *File) WriteAt(p []byte, off int64) (int, error) {
 	if !f.isWriteable() || f.isAppendOnly() {
 		return 0, syscall.EPERM
@@ -223,6 +237,8 @@ func (f *File) WriteAt(p []byte, off int64) (int, error) {
 	return f.doWriteAt(p, off)
 }
 
+// Close will close the file and remove it from opened files map.
+// It implements interface: io.Closer.
 func (f *File) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -253,6 +269,7 @@ func (f *File) Name() string {
 	return f.name
 }
 
+// Readdir read count files from the directory.
 func (f *File) Readdir(count int) ([]os.FileInfo, error) {
 	if !f.isReadable() || !f.isDir {
 		return nil, syscall.EPERM
@@ -262,6 +279,7 @@ func (f *File) Readdir(count int) ([]os.FileInfo, error) {
 	return fis, err
 }
 
+// Readdirnames read n file names form the directory.
 func (f *File) Readdirnames(n int) ([]string, error) {
 	if !f.isReadable() || !f.isDir {
 		return nil, syscall.EPERM
@@ -285,6 +303,7 @@ func (f *File) Stat() (os.FileInfo, error) {
 	return f.getFileInfo()
 }
 
+// Sync will sync the preloaded file into cloud storage.
 func (f *File) Sync() error {
 	if f.preloaded && f.preloadedFd != nil {
 		off, _ := f.preloadedFd.Seek(0, io.SeekCurrent)

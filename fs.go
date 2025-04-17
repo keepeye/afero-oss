@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	defaultFileMode = 0o755
-	defaultFileFlag = os.O_RDWR | os.O_CREATE
+	defaultFileMode = 0o755                   // default file mode for creating new file.
+	defaultFileFlag = os.O_RDWR | os.O_CREATE // default flag for creating new file.
 )
 
 type Fs struct {
@@ -29,6 +29,7 @@ type Fs struct {
 	ctx         context.Context
 }
 
+// NewOssFs creates a new ossfs.Fs object.
 func NewOssFs(accessKeyId, accessKeySecret, region, bucket string) *Fs {
 	ossCfg := oss.LoadDefaultConfig().
 		WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret)).
@@ -47,11 +48,14 @@ func NewOssFs(accessKeyId, accessKeySecret, region, bucket string) *Fs {
 	}
 }
 
+// WithPreloadFs sets the preload file system, it maybe useful when you want to
+// preload a large file before writing.
 func (fs *Fs) WithPreloadFs(pfs afero.Fs) *Fs {
 	fs.preloadFs = pfs
 	return fs
 }
 
+// WithContext sets the context for all operations.
 func (fs *Fs) WithContext(ctx context.Context) *Fs {
 	fs.ctx = ctx
 	return fs
