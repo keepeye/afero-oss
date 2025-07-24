@@ -27,6 +27,7 @@ type Fs struct {
 	openedFiles map[string]afero.File
 	preloadFs   afero.Fs
 	ctx         context.Context
+	ossCfg      *oss.Config
 }
 
 // NewOssFs creates a new ossfs.Fs object.
@@ -51,6 +52,7 @@ func NewOssFs(accessKeyId, accessKeySecret, region, bucket string, ossOpts ...OS
 		openedFiles: make(map[string]afero.File),
 		preloadFs:   afero.NewMemMapFs(),
 		ctx:         context.Background(),
+		ossCfg:      ossCfg,
 	}
 }
 
