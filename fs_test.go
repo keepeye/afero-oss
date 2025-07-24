@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
@@ -20,6 +21,7 @@ func TestNewOssFs(t *testing.T) {
 		accessKeySecret string
 		region          string
 		bucket          string
+		ossOptFuncs     []OSSOptionFunc
 		expected        *Fs
 	}{
 		{
@@ -28,6 +30,11 @@ func TestNewOssFs(t *testing.T) {
 			accessKeySecret: "testKeySecret",
 			region:          "test-region",
 			bucket:          "test-bucket",
+			ossOptFuncs: []OSSOptionFunc{func(c *oss.Config) {
+				c.WithEndpoint("testEndpoint")
+			}, func(c *oss.Config) {
+				c.WithUserAgent("testUA")
+			}},
 			expected: &Fs{
 				bucketName:  "test-bucket",
 				separator:   "/",
@@ -41,7 +48,7 @@ func TestNewOssFs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewOssFs(tt.accessKeyId, tt.accessKeySecret, tt.region, tt.bucket)
+			got := NewOssFs(tt.accessKeyId, tt.accessKeySecret, tt.region, tt.bucket, tt.ossOptFuncs...)
 			assert.NotNil(t, got.manager)
 			assert.Equal(t, tt.expected.bucketName, got.bucketName)
 			assert.Equal(t, tt.expected.separator, got.separator)
@@ -49,6 +56,8 @@ func TestNewOssFs(t *testing.T) {
 			assert.NotNil(t, got.openedFiles)
 			assert.NotNil(t, got.preloadFs)
 			assert.NotNil(t, got.ctx)
+			assert.Equal(t, "testEndpoint", *got.ossCfg.Endpoint)
+			assert.Equal(t, "testUA", *got.ossCfg.UserAgent)
 		})
 	}
 }

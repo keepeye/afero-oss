@@ -38,7 +38,10 @@ func main() {
         "your-access-key-id", 
         "your-access-key-secret", 
         "your-region", 
-        "your-bucket-name"
+        "your-bucket-name",
+        //ossfs.OSSWithEndpoint("oss-cn-hangzhou-internal.aliyuncs.com"),
+        //ossfs.OSSWithUseInternalEndpoint()
+        //使用ossfs.OSSWithXXX()配置OSS客户端, 或者你自定义一个OSSOptionFunc类型的函数.
     )
 
     // 像使用本地文件系统一样操作OSS

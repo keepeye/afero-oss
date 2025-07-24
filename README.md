@@ -40,7 +40,10 @@ func main() {
         "your-access-key-id", 
         "your-access-key-secret", 
         "your-region", 
-        "your-bucket-name"
+        "your-bucket-name",
+        //ossfs.OSSWithEndpoint("oss-cn-hangzhou-internal.aliyuncs.com"),
+        //ossfs.OSSWithUseInternalEndpoint()
+        //Configure the OSS client using ossfs.OSSWithXXX(), or you can customize an OSSOptionFunc.
     )
 
     // Operate OSS like a local file system
